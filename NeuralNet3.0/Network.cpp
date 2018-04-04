@@ -54,7 +54,7 @@ void Network::permuteData() {
 	std::shuffle(perm.indices().data(), perm.indices().data() + perm.indices().size(), getGen());
 
 	a = a * perm;
-	y = perm.transpose() * y;
+	y = perm * y;
 }
 
 void Network::updateMinibatch(Eigen::Index startBatch, Eigen::Index len, float eta, float lmbda) {
@@ -214,7 +214,7 @@ void Network::SGD(int epochs, int batchSize, float eta, float etaFac, float lmbd
 	Index nTrain = labels[0].size();
 	Index nVal = labels[2].size();
 	for (int i = 0; i < epochs; ++i) {
-//		permuteData();
+		permuteData();
 		for (Index startBatch = 0; startBatch + batchSize - 1 < images[0].cols(); startBatch += batchSize) {
 			updateMinibatch(startBatch, batchSize, eta, lmbda);
 		}
