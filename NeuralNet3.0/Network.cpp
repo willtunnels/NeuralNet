@@ -115,14 +115,11 @@ Network::mvp_t Network::fwdAndBackProp(const Eigen::Ref<const Eigen::VectorXf>& 
 
 float Network::totalCost(float lmbda) {
 	float cost = 0.0f;
-//	std::size_t len = images[2].cols();
-	std::size_t len = images[0].cols();
+	std::size_t len = images[2].cols();
 
 	for (std::size_t i = 0; i < len; ++i) {
-//		Ref<VectorXf> x = images[2].col(i);
-//		uint8_t y = labels[2][i];
-		Ref<VectorXf> x = images[0].col(i);
-		uint8_t y = labels[0][i];
+		Ref<VectorXf> x = images[2].col(i);
+		uint8_t y = labels[2][i];
 		
 		VectorXf a = feedFwd(x);
 		cost += costFnSigmoid(a, y) / len;
@@ -138,14 +135,11 @@ float Network::totalCost(float lmbda) {
 
 float Network::accuracy() {
 	int sum = 0;
-//	std::size_t len = images[2].cols();
-	std::size_t len = images[0].cols();
+	std::size_t len = images[2].cols();
 
 	for (std::size_t i = 0; i < len; ++i) {
-		//Ref<VectorXf> x = images[2].col(i);
-		//uint8_t y = labels[2][i];
-		Ref<VectorXf> x = images[0].col(i);
-		uint8_t y = labels[0][i];
+		Ref<VectorXf> x = images[2].col(i);
+		uint8_t y = labels[2][i];
 
 		VectorXf a = feedFwd(x);
 

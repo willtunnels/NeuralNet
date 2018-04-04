@@ -1,6 +1,5 @@
 #include "mnist.h"
 #include <array>
-#include "zlib/zlib.h"
 
 int mnist::reverseInt(int i)
 {
@@ -35,10 +34,10 @@ std::array<Eigen::MatrixXf, 3> mnist::read_mnist_images(const std::string& full_
 
 		assert(trainingSize + testSize <= actual_nm_imgs);
 		std::array<MatrixXf, 3> _dataset = { Map<Matrix<uint8_t, Dynamic, Dynamic>>(buff, image_size, trainingSize).cast<float>() / 256.0f,
-											 Map<Matrix<uint8_t, Dynamic, Dynamic>>(buff + trainingSize, image_size, testSize).cast<float>() / 256.0f,
-											 Map<Matrix<uint8_t, Dynamic, Dynamic>>(buff + trainingSize + testSize, image_size, actual_nm_imgs - trainingSize - testSize).cast<float>() / 256.0f };
+											 Map<Matrix<uint8_t, Dynamic, Dynamic>>(buff + trainingSize * image_size, image_size, testSize).cast<float>() / 256.0f,
+											 Map<Matrix<uint8_t, Dynamic, Dynamic>>(buff + (trainingSize + testSize) * image_size, image_size, actual_nm_imgs - trainingSize - testSize).cast<float>() / 256.0f };
 
-		delete buff;
+		delete[] buff;
 		return _dataset;
 	}
 	else {
@@ -71,7 +70,7 @@ std::array<mnist::label_t, 3> mnist::read_mnist_labels(const std::string& full_p
 												   Map<mnist::label_t>(buff + trainingSize, testSize),
 												   Map<mnist::label_t>(buff + trainingSize + testSize, actual_nm_labels - trainingSize - testSize) };
 
-		delete buff;
+		delete[] buff;
 		return _dataset;
 	}
 	else {
