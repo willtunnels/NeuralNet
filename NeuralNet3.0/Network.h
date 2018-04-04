@@ -49,5 +49,5 @@ public:
 		std::vector<Eigen::VectorXf> bs, std::vector<Eigen::MatrixXf> ws,
 		std::array<Eigen::MatrixXf, 3> images, std::array<mnist::label_t, 3> labels);
 
-	void SGD(int epochs, int batchSize, float eta, float etaFac, float lmbda);
+	void SGD(int epochs, int batchSize, float eta, float lmbda);
 };

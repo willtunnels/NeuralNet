@@ -174,14 +174,12 @@ float Network::costFnSigmoid(const Eigen::Ref<const Eigen::VectorXf>& a, uint8_t
 			if (a[i] > 0)
 				cost -= std::logf(a[i]);
 			else
-				throw std::runtime_error{ "a[i] <= 0" };
-				//cost += 99; //arbitrarily large number
+				cost += 99; //arbitrarily large number
 		else
 			if (1 - a[i] > 0)
 				cost -= std::logf(1 - a[i]);
 			else
-				throw std::runtime_error{ "1 - a[i] <= 0" };
-				//cost += 99; //arbitrarily large number
+				cost += 99; //arbitrarily large number
 	return cost;
 }
 
@@ -210,7 +208,7 @@ Network::Network(std::initializer_list<Eigen::Index> sizes,
 {
 }
 
-void Network::SGD(int epochs, int batchSize, float eta, float etaFac, float lmbda) {
+void Network::SGD(int epochs, int batchSize, float eta, float lmbda) {
 	Index nTrain = labels[0].size();
 	Index nVal = labels[2].size();
 	for (int i = 0; i < epochs; ++i) {
@@ -223,7 +221,5 @@ void Network::SGD(int epochs, int batchSize, float eta, float etaFac, float lmbd
 		std::printf("Cost on validation data: %f\n", cost);
 		float acc = accuracy();
 		std::printf("Accuracy on validation data: %f\n\n", acc);
-//		eta = eta * etaFac;
-//		etaFac = (0.5f + etaFac) / 1.5f;
 	}
 }
