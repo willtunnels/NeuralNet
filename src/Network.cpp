@@ -7,109 +7,118 @@
 
 using namespace Eigen;
 
+namespace {
+
 std::mt19937&
-Network::getGen()
+randGen()
 {
-  static std::mt19937 gen(static_cast<unsigned>(std::time(NULL)));
+  thread_local std::mt19937 gen{ std::random_device{}() };
   return gen;
 }
 
 float
-Network::genRand()
+normalRand()
 {
-  static std::normal_distribution<float> norm;
-  return norm(getGen());
+  thread_local std::normal_distribution<float> norm{};
+  return norm(randGen());
 }
 
 float
-Network::sigmoid(float val)
+sigmoid(float val)
 {
   return 1.0f / (1.0f + std::exp(-val));
 }
 
 float
-Network::sigmoidPrime(float val)
+sigmoidPrime(float val)
 {
   return val * (1 - val);
 }
 
 Eigen::VectorXf
-Network::deltaL(const Eigen::Ref<const Eigen::VectorXf>& a, uint8_t y)
+deltaL(const Eigen::Ref<const Eigen::VectorXf>& a, uint8_t y)
 {
   VectorXf ret = a;
   ret[y] -= 1;
   return ret;
 }
 
-void
-Network::randomizeWeights()
+float
+costFnSigmoid(const Eigen::Ref<const Eigen::VectorXf>& a, uint8_t y)
 {
-  bs.reserve(numLayers - 1);
-  ws.reserve(numLayers - 1);
-  for (size_t i = 1; i < numLayers; ++i) {
-    Eigen::Index y = sizes[i], x = sizes[i - 1];
+  float cost = 0.0f;
+  for (Index i = 0; i < a.size(); ++i) {
+    if (y == i) {
+      if (a[i] > 0) {
+        cost -= std::log(a[i]);
+      } else {
+        cost += 99; // arbitrarily large number
+      }
+    } else {
+      if (1 - a[i] > 0) {
+        cost -= std::log(1 - a[i]);
+      } else {
+        cost += 99; // arbitrarily large number
+      }
+    }
+  }
+  return cost;
+}
 
-    bs.emplace_back(y);
-    bs.back() = bs.back().unaryExpr([](float) { return genRand(); });
+} // anonymous namespace
 
-    ws.emplace_back(y, x);
-    ws.back() = ws.back().unaryExpr(
-      [x](float) { return genRand() / std::sqrt(static_cast<float>(x)); });
+void
+Network::randomizeWeights_()
+{
+  bs_.reserve(numLayers_ - 1);
+  ws_.reserve(numLayers_ - 1);
+  for (size_t i = 1; i < numLayers_; ++i) {
+    Eigen::Index y = sizes_[i], x = sizes_[i - 1];
+
+    bs_.emplace_back(y);
+    bs_.back() = bs_.back().unaryExpr([](float) { return normalRand(); });
+
+    ws_.emplace_back(y, x);
+    ws_.back() = ws_.back().unaryExpr(
+      [x](float) { return normalRand() / std::sqrt(static_cast<float>(x)); });
   }
 }
 
 void
-Network::permuteData()
+Network::permuteData_()
 {
-  MatrixXf& a = images[0];
-  mnist::label_t& y = labels[0];
+  MatrixXf& a = images_[0];
+  mnist::label_t& y = labels_[0];
 
-  Transpositions<Dynamic> perm(
-    y.size()); // y.size() is the same as the number of cols in a
+  // y.size() is the same as the number of cols in a
+  Transpositions<Dynamic> perm(y.size());
   perm.setIdentity();
   std::shuffle(perm.indices().data(),
                perm.indices().data() + perm.indices().size(),
-               getGen());
+               randGen());
 
   a = a * perm;
   y = perm * y;
 }
 
 void
-Network::updateMinibatch(Eigen::Index startBatch,
-                         Eigen::Index len,
-                         float eta,
-                         float lmbda)
+Network::initDeltas_(std::vector<Eigen::MatrixXf>& deltaWs,
+                     std::vector<Eigen::MatrixXf>& deltaBs)
 {
-  std::vector<Eigen::MatrixXf> deltaWs;
-  std::vector<Eigen::MatrixXf> deltaBs;
-  initDeltas(deltaWs, deltaBs);
-
-  for (Index i = 0; i < len; ++i) {
-    Ref<VectorXf> x = images[0].col(startBatch + i);
-    uint8_t y = labels[0][startBatch + i];
-    auto [deltaNabBs, deltaNabWs] = fwdAndBackProp(x, y);
-
-    assert(deltaWs.size() == deltaBs.size());
-    for (std::size_t j = 0; j < deltaNabBs.size(); ++j) {
-      deltaBs[j] += deltaNabBs[j];
-      deltaWs[j] += deltaNabWs[j];
-    }
-  }
-
-  assert(ws.size() == deltaWs.size());
-  for (std::size_t j = 0; j < ws.size(); ++j) {
-    ws[j] = (1 - eta * (lmbda / len)) * ws[j] - (eta / len) * deltaWs[j];
-    bs[j] = bs[j] - (eta / len) * deltaBs[j];
+  deltaWs.reserve(ws_.size());
+  deltaBs.reserve(bs_.size());
+  for (std::size_t i = 0; i < ws_.size(); ++i) {
+    deltaWs.emplace_back(MatrixXf::Zero(ws_[i].rows(), ws_[i].cols()));
+    deltaBs.emplace_back(MatrixXf::Zero(bs_[i].rows(), bs_[i].cols()));
   }
 }
 
 Network::mvp_t
-Network::fwdAndBackProp(const Eigen::Ref<const Eigen::VectorXf>& x, uint8_t y)
+Network::fwdAndBackProp_(const Eigen::Ref<const Eigen::VectorXf>& x, uint8_t y)
 {
   std::vector<Eigen::MatrixXf> deltaWs;
   std::vector<Eigen::MatrixXf> deltaBs;
-  initDeltas(deltaWs, deltaBs);
+  initDeltas_(deltaWs, deltaBs);
 
   // forward
   std::vector<VectorXf> activations;
@@ -117,7 +126,7 @@ Network::fwdAndBackProp(const Eigen::Ref<const Eigen::VectorXf>& x, uint8_t y)
   VectorXf* curA = &activations[0];
 
   for (std::size_t i = 0; i < 2; ++i) {
-    activations.emplace_back(ws[i] * *curA + bs[i]);
+    activations.emplace_back(ws_[i] * *curA + bs_[i]);
     curA = &activations.back();
     *curA = curA->unaryExpr(&sigmoid);
   }
@@ -132,45 +141,85 @@ Network::fwdAndBackProp(const Eigen::Ref<const Eigen::VectorXf>& x, uint8_t y)
   // hidden layer
   curLayer = 1;
   VectorXf sp = activations[curLayer].unaryExpr(&sigmoidPrime);
-  delta = (ws[curLayer].transpose() * delta).array() * sp.array();
+  delta = (ws_[curLayer].transpose() * delta).array() * sp.array();
   deltaBs[0] = delta;
   deltaWs[0] = delta * activations[curLayer - 1].transpose();
   return { deltaBs, deltaWs };
 }
 
+void
+Network::updateMinibatch_(Eigen::Index startBatch,
+                          Eigen::Index len,
+                          float eta,
+                          float lambda)
+{
+  std::vector<Eigen::MatrixXf> deltaWs;
+  std::vector<Eigen::MatrixXf> deltaBs;
+  initDeltas_(deltaWs, deltaBs);
+
+  for (Index i = 0; i < len; ++i) {
+    Ref<VectorXf> x = images_[0].col(startBatch + i);
+    uint8_t y = labels_[0][startBatch + i];
+    auto [deltaNabBs, deltaNabWs] = fwdAndBackProp_(x, y);
+
+    assert(deltaWs.size() == deltaBs.size());
+    for (std::size_t j = 0; j < deltaNabBs.size(); ++j) {
+      deltaBs[j] += deltaNabBs[j];
+      deltaWs[j] += deltaNabWs[j];
+    }
+  }
+
+  assert(ws_.size() == deltaWs.size());
+  for (std::size_t j = 0; j < ws_.size(); ++j) {
+    ws_[j] = (1 - eta * (lambda / len)) * ws_[j] - (eta / len) * deltaWs[j];
+    bs_[j] = bs_[j] - (eta / len) * deltaBs[j];
+  }
+}
+
+Eigen::VectorXf
+Network::feedFwd_(const Eigen::Ref<const Eigen::VectorXf>& act)
+{
+  VectorXf ret = act;
+  for (std::size_t i = 0; i < 2; ++i) {
+    VectorXf z = ws_[i] * ret + bs_[i];
+    ret = z.unaryExpr(&sigmoid);
+  }
+  return ret;
+}
+
 float
-Network::totalCost(float lmbda)
+Network::totalCost_(float lambda)
 {
   float cost = 0.0f;
-  std::size_t len = images[2].cols();
+  std::size_t len = images_[2].cols();
 
   for (std::size_t i = 0; i < len; ++i) {
-    Ref<VectorXf> x = images[2].col(i);
-    uint8_t y = labels[2][i];
+    Ref<VectorXf> x = images_[2].col(i);
+    uint8_t y = labels_[2][i];
 
-    VectorXf a = feedFwd(x);
+    VectorXf a = feedFwd_(x);
     cost += costFnSigmoid(a, y) / len;
   }
 
   float temp = 0.0f;
-  for (auto&& w : ws)
+  for (auto&& w : ws_)
     temp += w.squaredNorm();
-  cost += 0.5f * (lmbda / len) * temp;
+  cost += 0.5f * (lambda / len) * temp;
 
   return cost;
 }
 
 float
-Network::accuracy()
+Network::accuracy_()
 {
   int sum = 0;
-  std::size_t len = images[2].cols();
+  std::size_t len = images_[2].cols();
 
   for (std::size_t i = 0; i < len; ++i) {
-    Ref<VectorXf> x = images[2].col(i);
-    uint8_t y = labels[2][i];
+    Ref<VectorXf> x = images_[2].col(i);
+    uint8_t y = labels_[2][i];
 
-    VectorXf a = feedFwd(x);
+    VectorXf a = feedFwd_(x);
 
     Index idx = 0;
     float max = a[0];
@@ -187,62 +236,19 @@ Network::accuracy()
   return static_cast<float>(sum) / len;
 }
 
-Eigen::VectorXf
-Network::feedFwd(const Eigen::Ref<const Eigen::VectorXf>& act)
-{
-  VectorXf ret = act;
-  for (std::size_t i = 0; i < 2; ++i) {
-    VectorXf z = ws[i] * ret + bs[i];
-    ret = z.unaryExpr(&sigmoid);
-  }
-  return ret;
-}
-
-float
-Network::costFnSigmoid(const Eigen::Ref<const Eigen::VectorXf>& a, uint8_t y)
-{
-  float cost = 0.0f;
-  for (Index i = 0; i < a.size(); ++i) {
-    if (y == i) {
-      if (a[i] > 0) {
-        cost -= std::log(a[i]);
-      } else {
-        cost += 99; // arbitrarily large number
-      }
-    } else if (1 - a[i] > 0) {
-      cost -= std::log(1 - a[i]);
-    } else {
-      cost += 99; // arbitrarily large number
-    }
-  }
-  return cost;
-}
-
-void
-Network::initDeltas(std::vector<Eigen::MatrixXf>& deltaWs,
-                    std::vector<Eigen::MatrixXf>& deltaBs)
-{
-  deltaWs.reserve(ws.size());
-  deltaBs.reserve(bs.size());
-  for (std::size_t i = 0; i < ws.size(); ++i) {
-    deltaWs.emplace_back(MatrixXf::Zero(ws[i].rows(), ws[i].cols()));
-    deltaBs.emplace_back(MatrixXf::Zero(bs[i].rows(), bs[i].cols()));
-  }
-}
-
 Network::Network(std::initializer_list<Eigen::Index> sizes,
                  const std::string& imgPath,
                  const std::string& labelPath,
                  int trainingSize,
                  int testSize,
                  int validationSize)
-  : numLayers(sizes.size())
-  , sizes(sizes)
+  : numLayers_(sizes.size())
+  , sizes_(sizes)
 {
-  randomizeWeights();
-  images =
+  randomizeWeights_();
+  images_ =
     mnist::read_mnist_images(imgPath, trainingSize, testSize, validationSize);
-  labels =
+  labels_ =
     mnist::read_mnist_labels(labelPath, trainingSize, testSize, validationSize);
 }
 
@@ -251,29 +257,29 @@ Network::Network(std::initializer_list<Eigen::Index> sizes,
                  std::vector<Eigen::MatrixXf> ws,
                  std::array<Eigen::MatrixXf, 3> images,
                  std::array<mnist::label_t, 3> labels)
-  : numLayers(sizes.size())
-  , sizes(sizes)
-  , bs(std::move(bs))
-  , ws(std::move(ws))
-  , images(std::move(images))
-  , labels(std::move(labels))
+  : numLayers_(sizes.size())
+  , sizes_(sizes)
+  , bs_(std::move(bs))
+  , ws_(std::move(ws))
+  , images_(std::move(images))
+  , labels_(std::move(labels))
 {}
 
 void
-Network::SGD(int epochs, int batchSize, float eta, float lmbda)
+Network::SGD(int epochs, int batchSize, float eta, float lambda)
 {
-  Index nTrain = labels[0].size();
-  Index nVal = labels[2].size();
+  Index nTrain = labels_[0].size();
+  Index nVal = labels_[2].size();
   for (int i = 0; i < epochs; ++i) {
-    permuteData();
-    for (Index startBatch = 0; startBatch + batchSize - 1 < images[0].cols();
+    permuteData_();
+    for (Index startBatch = 0; startBatch + batchSize - 1 < images_[0].cols();
          startBatch += batchSize) {
-      updateMinibatch(startBatch, batchSize, eta, lmbda);
+      updateMinibatch_(startBatch, batchSize, eta, lambda);
     }
     std::printf("Epoch %d training complete\n", i);
-    float cost = totalCost(lmbda);
+    float cost = totalCost_(lambda);
     std::printf("Cost on validation data: %f\n", cost);
-    float acc = accuracy();
+    float acc = accuracy_();
     std::printf("Accuracy on validation data: %f\n\n", acc);
   }
 }

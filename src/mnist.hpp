@@ -1,4 +1,6 @@
-#pragma once
+#ifndef _f7f1a24c_ef8a_4f40_b4e8_1c443ac98940
+#define _f7f1a24c_ef8a_4f40_b4e8_1c443ac98940
+
 #include <Eigen/Dense>
 #include <algorithm>
 #include <exception>
@@ -9,8 +11,8 @@
 // the code in the mnist namespace is based on that of users dariush and
 // mrgloom from stackoverflow see
 // https://stackoverflow.com/questions/8286668/how-to-read-mnist-data-in-c
-
 namespace mnist {
+
 using label_t = Eigen::Matrix<uint8_t, Eigen::Dynamic, 1>;
 
 int
@@ -27,4 +29,7 @@ read_mnist_labels(const std::string& full_path,
                   int trainingSize,
                   int testSize,
                   int validationSize);
-}
+
+} // namespace mnist
+
+#endif
