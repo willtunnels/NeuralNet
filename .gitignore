@@ -1,5 +1,5 @@
-/.vs/
-Debug/
-Release/
-x64/
-/includes/ignore/
+/build/
+*.bak
+*.log
+*.out
+core

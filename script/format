@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# before each commit, all C++ code should be formatted like so
+cd "${0%/*}" && find ../src -name "*.hpp" -o -name "*.cpp" | xargs clang-format -style=file -i
